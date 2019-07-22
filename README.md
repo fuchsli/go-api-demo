@@ -4,7 +4,7 @@ This document serves as a tutorial for the Go API Demo.
 
 ### Preface
 
-To emulate the feel of an actual API, this program has a running version hosted at 155.138.234.238 on port 8081.
+To emulate the feel of an actual API, this program has a running version hosted at https://fuchsli.com on port 8081.
 
 ### Testing the Application
 
