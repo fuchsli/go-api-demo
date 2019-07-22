@@ -22,9 +22,11 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -50,6 +52,27 @@ var (
 	collection *mongo.Collection
 )
 
+func redirectTLS(w http.ResponseWriter, r *http.Request) {
+	domain := "fuchsli.com"
+	http.Redirect(w, r, "https://"+domain+r.RequestURI, http.StatusMovedPermanently)
+}
+
+func redirectWWW(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Request host has www. prefix. Redirect to host with www. trimmed.
+		host := strings.TrimPrefix(r.Host, "www.")
+
+		if host != r.Host {
+			// http.Redirect(w, r, u.String(), http.StatusFound)
+			http.Redirect(w, r, "https://"+host+r.RequestURI, http.StatusFound)
+			return
+		}
+
+		h.ServeHTTP(w, r)
+
+	})
+}
+
 // Connect to MongoDB
 func init() {
 	// Create a MongoDB Connection on Port 27017
@@ -68,6 +91,10 @@ func init() {
 }
 
 func main() {
+
+	certfile := "/etc/letsencrypt/live/fuchsli.com-0003/fullchain.pem"
+	privkey := "/etc/letsencrypt/live/fuchsli.com-0003/privkey.pem"
+
 	// Initialize router
 	r := mux.NewRouter()
 
@@ -78,5 +105,18 @@ func main() {
 	r.HandleFunc("/api/members/{id}", updateMember).Methods("PATCH")
 	r.HandleFunc("/api/members/{id}", deleteMember).Methods("DELETE")
 	r.HandleFunc("/api/members", deleteMembers).Methods("DELETE")
-	log.Fatal(http.ListenAndServe(":8081", r))
+
+	go func() {
+		if err := http.ListenAndServe(":8082", http.HandlerFunc(redirectTLS)); err != nil {
+			log.Fatalf("ListenAndServe error: %v", err)
+		}
+	}()
+
+	config := &tls.Config{MinVersion: tls.VersionTLS10}
+	server := &http.Server{
+		Addr:      ":8081",
+		Handler:   redirectWWW(r),
+		TLSConfig: config,
+	}
+	log.Fatal(server.ListenAndServeTLS(certfile, privkey))
 }
